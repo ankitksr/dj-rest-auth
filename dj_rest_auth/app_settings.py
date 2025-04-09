@@ -1,7 +1,8 @@
+from datetime import timedelta
+
 from django.conf import settings
 from django.utils.translation import gettext_lazy as _
 from rest_framework.settings import APISettings as _APISettings
-
 
 USER_SETTINGS = getattr(settings, "REST_AUTH", None)
 
@@ -39,6 +40,8 @@ DEFAULTS = {
     'JWT_AUTH_RETURN_EXPIRATION': False,
     'JWT_AUTH_COOKIE_USE_CSRF': False,
     'JWT_AUTH_COOKIE_ENFORCE_CSRF_ON_UNAUTHENTICATED': False,
+
+    "LOGIN_BY_CODE_GRACE_PERIOD": timedelta(days=2)
 }
 
 # List of settings that may be in string import notation.

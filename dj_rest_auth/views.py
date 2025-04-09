@@ -14,9 +14,9 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .app_settings import api_settings
-from .models import get_token_model
+from .models import LoginVerificationCode, get_token_model
+from .serializers import LoginVerificationCodeSerializer, VerifyLoginCodeSerializer
 from .utils import jwt_encode
-
 
 sensitive_post_parameters_m = method_decorator(
     sensitive_post_parameters(
@@ -127,6 +127,87 @@ class LoginView(GenericAPIView):
         self.login()
         return self.get_response()
 
+
+
+
+class LoginInitiateView(LoginView):
+    """
+    Handles initial login attempt and triggers verification if needed.
+    """
+    verification_id = None
+
+    def _check_and_initiate_verification(self, user):
+        """
+        Checks if verification is needed and initiates the verification process.
+        """
+        if 'allauth.account' not in settings.INSTALLED_APPS:
+            return
+
+        from allauth.account import app_settings as allauth_account_settings
+        from allauth.account.adapter import get_adapter
+
+        if not allauth_account_settings.LOGIN_BY_CODE_REQUIRED:
+            return
+
+        latest_verification = (
+            LoginVerificationCode.objects.select_related('user')
+            .filter(user=user, is_verified=True)
+            .order_by('-last_verified_at')
+            .first()
+        )
+
+        if not latest_verification or latest_verification.needs_new_verification:
+            verification = LoginVerificationCode.objects.create(user=user)
+
+            adapter = get_adapter(self.request)
+            context = {
+                'username': verification.user.username,
+                'code': verification.code,
+            }
+            adapter.send_mail(
+                template_prefix='account/email/login_code',
+                email=verification.user.email,
+                context=context,
+            )
+
+            self.verification_id = verification.id
+
+    def post(self, request, *args, **kwargs):
+        self.request = request
+        self.serializer = self.get_serializer(data=self.request.data)
+        self.serializer.is_valid(raise_exception=True)
+        user = self.serializer.validated_data['user']
+
+        self._check_and_initiate_verification(user)
+        if self.verification_id:
+            data = {
+                'verification_id': self.verification_id,
+                'requires_verification': True,
+            }
+            serializer = LoginVerificationCodeSerializer(instance=data)
+            return Response(serializer.data)
+
+        self.login()
+        return self.get_response()
+
+
+class LoginVerifyView(LoginView):
+    """
+    Handles verification of login codes.
+    """
+    serializer_class = VerifyLoginCodeSerializer
+
+    def post(self, request, *args, **kwargs):
+        self.serializer = self.get_serializer(data=request.data)
+        self.serializer.is_valid(raise_exception=True)
+
+        verification_code = self.serializer.validated_data['verification_code']
+        verification_code.is_verified = True
+        verification_code.last_verified_at = timezone.now()
+        verification_code.save()
+
+        self.login()
+        return self.get_response()
 
 class LogoutView(APIView):
     """

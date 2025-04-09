@@ -1,6 +1,6 @@
 from django.conf import settings
 from django.contrib.auth import authenticate, get_user_model
-from django.contrib.auth.forms import SetPasswordForm, PasswordResetForm
+from django.contrib.auth.forms import PasswordResetForm, SetPasswordForm
 from django.urls import exceptions as url_exceptions
 from django.utils.encoding import force_str
 from django.utils.translation import gettext_lazy as _
@@ -12,7 +12,7 @@ from .app_settings import api_settings
 if 'allauth' in settings.INSTALLED_APPS:
     from .forms import AllAuthPasswordResetForm
 
-from .models import TokenModel
+from .models import LoginVerificationCode, TokenModel
 
 # Get the UserModel
 UserModel = get_user_model()
@@ -134,6 +134,47 @@ class LoginSerializer(serializers.Serializer):
         attrs['user'] = user
         return attrs
 
+
+class LoginVerificationCodeSerializer(serializers.Serializer):
+    """
+    Serializer for basic login verification code operations.
+    """
+    verification_id = serializers.UUIDField(read_only=True, format='hex')
+    requires_verification = serializers.BooleanField(read_only=True)
+
+
+class VerifyLoginCodeSerializer(serializers.Serializer):
+    """
+    Serializer for validating login verification codes during the verification step.
+    """
+    code = serializers.CharField(
+        max_length=6,
+        min_length=6,
+        help_text='6-digit verification code sent via email'
+    )
+    verification_id = serializers.UUIDField(
+        format='hex',
+        help_text='ID of the LoginVerificationCode instance'
+    )
+
+    def validate(self, attrs):
+        try:
+            verification_code = LoginVerificationCode.objects.get(
+                id=attrs['verification_id'],
+                code=attrs['code'],
+                is_verified=False
+            )
+            if verification_code.is_expired:
+                raise serializers.ValidationError({
+                    'code': 'This verification code has expired.'
+                })
+            attrs['verification_code'] = verification_code
+            attrs["user"] = verification_code.user
+            return attrs
+        except LoginVerificationCode.DoesNotExist:
+            raise serializers.ValidationError({
+                'code': 'Invalid verification code.'
+            })
 
 class TokenSerializer(serializers.ModelSerializer):
     """
