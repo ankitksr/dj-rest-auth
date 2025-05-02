@@ -127,7 +127,7 @@ class SocialLoginSerializer(serializers.Serializer):
                 adapter.access_token_method,
                 adapter.access_token_url,
                 self.callback_url,
-                scope,
+                # scope,
                 scope_delimiter=adapter.scope_delimiter,
                 headers=adapter.headers,
                 basic_auth=adapter.basic_auth,
