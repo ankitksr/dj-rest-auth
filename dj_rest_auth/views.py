@@ -143,10 +143,9 @@ class LoginInitiateView(LoginView):
         if 'allauth.account' not in settings.INSTALLED_APPS:
             return
 
-        from allauth.account import app_settings as allauth_account_settings
         from allauth.account.adapter import get_adapter
 
-        if not allauth_account_settings.LOGIN_BY_CODE_REQUIRED:
+        if not api_settings.LOGIN_BY_CODE_REQUIRED:
             return
 
         latest_verification = (
